@@ -14,6 +14,7 @@ import {
   MatchScreenshot,
   AuthSession
 } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface CachedCreds {
   email: string;
@@ -276,6 +277,220 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => clearInterval(interval);
   }, [currentUser]);
 
+  // Live Supabase Sync & Realtime Listeners
+  useEffect(() => {
+    const client = supabase;
+    if (!client) return;
+
+    const fetchAllData = async () => {
+      try {
+        // 1. Live Users
+        const { data: usersData, error: usersErr } = await client.from('users').select('*');
+        if (!usersErr && usersData && usersData.length > 0) {
+          const mappedUsers: User[] = usersData.map((u: any) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            password: u.password,
+            role: (u.email.toLowerCase() === 'vedhanayagant2000@gmail.com' ? 'master_admin' : u.role) as any,
+            status: u.is_approved ? 'active' : 'pending_approval',
+            created_at: u.created_at,
+            igid: u.igid
+          }));
+          setUsers(mappedUsers);
+        }
+
+        // 2. Live Players
+        const { data: playersData, error: playersErr } = await client.from('players').select('*');
+        if (!playersErr && playersData && playersData.length > 0) {
+          const mappedPlayers: Player[] = playersData.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            ign: p.in_game_name || p.name,
+            igid: p.igid || 'Pending',
+            role: p.role || 'assault',
+            status: p.status || 'starter',
+            join_date: p.joined_date || new Date().toISOString().split('T')[0],
+            avatar: p.avatar
+          }));
+          setPlayers(mappedPlayers);
+        }
+
+        // 3. Live Tournaments
+        const { data: tournData, error: tournErr } = await client.from('tournaments').select('*');
+        if (!tournErr && tournData && tournData.length > 0) {
+          const mappedTourn: Tournament[] = tournData.map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            organizer: t.organizer || '',
+            tier: t.tier,
+            status: t.status || 'available',
+            prize_pool: Number(t.prize_pool) || 0,
+            start_date: t.start_date || '',
+            end_date: t.end_date || '',
+            format: 'TPP',
+            entry_fee: 0,
+            points_system_id: 'ps_official',
+            apply_link: t.apply_link,
+            contact_info: t.contact_info
+          }));
+          setTournaments(mappedTourn);
+        }
+
+        // 4. Live Matches
+        const { data: matchData, error: matchErr } = await client.from('matches').select('*');
+        if (!matchErr && matchData && matchData.length > 0) {
+          const mappedMatches: Match[] = matchData.map((m: any) => ({
+            id: m.id,
+            tournament_id: m.tournament_id,
+            match_number: m.match_number,
+            map: m.map as any,
+            match_date: m.date || new Date().toISOString().split('T')[0],
+            status: 'completed',
+            screenshot: m.screenshot_url ? {
+              id: `sc_${m.id}`,
+              match_id: m.id,
+              data_url: m.screenshot_url,
+              name: m.screenshot_name || 'End Screen',
+              description: m.notes || '',
+              uploaded_at: m.created_at || new Date().toISOString()
+            } : undefined
+          }));
+          setMatches(mappedMatches);
+        }
+
+        // 5. Live Tasks
+        const { data: tasksData, error: tasksErr } = await client.from('tasks').select('*');
+        if (!tasksErr && tasksData && tasksData.length > 0) {
+          const mappedTasks: Task[] = tasksData.map((tk: any) => ({
+            id: tk.id,
+            title: tk.title,
+            description: tk.description || '',
+            category: (tk.category as any) || 'tactics',
+            assigned_by: 'Master Admin',
+            assigned_to_squad: true,
+            priority: (tk.priority as any) || 'medium',
+            status: (tk.status as any) || 'assigned',
+            due_date: tk.due_date || '',
+            is_recurring: false,
+            comments: [],
+            created_at: tk.created_at || new Date().toISOString().split('T')[0]
+          }));
+          setTasks(mappedTasks);
+        }
+
+        // 6. Live Investments & Returns
+        const { data: invData } = await client.from('investments').select('*');
+        if (invData && invData.length > 0) {
+          setInvestments(invData.map((i: any) => ({
+            id: i.id,
+            type: (i.category as any) || 'scrims',
+            amount: Number(i.amount) || 0,
+            spent_date: i.date || new Date().toISOString().split('T')[0],
+            note: i.notes || i.title || 'Expense'
+          })));
+        }
+
+        const { data: retData } = await client.from('returns').select('*');
+        if (retData && retData.length > 0) {
+          setReturns(retData.map((r: any) => ({
+            id: r.id,
+            type: (r.source as any) || 'prize',
+            amount: Number(r.amount) || 0,
+            received_date: r.date || new Date().toISOString().split('T')[0],
+            note: r.notes || r.title || 'Income'
+          })));
+        }
+      } catch (err) {
+        console.warn('Supabase fetch failed:', err);
+      }
+    };
+
+    fetchAllData();
+
+    // Subscribe to realtime changes for instant multi-device reflection
+    const channel = client
+      .channel('public_realtime_all')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+        client.from('users').select('*').then(({ data }) => {
+          if (data && data.length > 0) {
+            setUsers(data.map((u: any) => ({
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              password: u.password,
+              role: (u.email.toLowerCase() === 'vedhanayagant2000@gmail.com' ? 'master_admin' : u.role) as any,
+              status: u.is_approved ? 'active' : 'pending_approval',
+              created_at: u.created_at,
+              igid: u.igid
+            })));
+          }
+        });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, () => {
+        client.from('players').select('*').then(({ data }) => {
+          if (data) {
+            setPlayers(data.map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              ign: p.in_game_name || p.name,
+              igid: p.igid || 'Pending',
+              role: p.role || 'assault',
+              status: p.status || 'starter',
+              join_date: p.joined_date || new Date().toISOString().split('T')[0],
+              avatar: p.avatar
+            })));
+          }
+        });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, () => {
+        client.from('tournaments').select('*').then(({ data }) => {
+          if (data) {
+            setTournaments(data.map((t: any) => ({
+              id: t.id,
+              name: t.name,
+              organizer: t.organizer || '',
+              tier: t.tier,
+              status: t.status || 'available',
+              prize_pool: Number(t.prize_pool) || 0,
+              start_date: t.start_date || '',
+              end_date: t.end_date || '',
+              format: 'TPP',
+              entry_fee: 0,
+              points_system_id: 'ps_official',
+              apply_link: t.apply_link,
+              contact_info: t.contact_info
+            })));
+          }
+        });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        client.from('tasks').select('*').then(({ data }) => {
+          if (data) {
+            setTasks(data.map((tk: any) => ({
+              id: tk.id,
+              title: tk.title,
+              description: tk.description || '',
+              category: (tk.category as any) || 'tactics',
+              assigned_by: 'Master Admin',
+              assigned_to_squad: true,
+              priority: (tk.priority as any) || 'medium',
+              status: (tk.status as any) || 'assigned',
+              due_date: tk.due_date || '',
+              is_recurring: false,
+              comments: [],
+              created_at: tk.created_at || new Date().toISOString().split('T')[0]
+            })));
+          }
+        });
+      })
+      .subscribe();
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  }, []);
+
   // -------------------------------------------------------------
   // AUTHENTICATION & APPROVALS
   // -------------------------------------------------------------
@@ -346,6 +561,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setUsers((prev) => [...prev, newUser]);
 
+    if (supabase) {
+      supabase.from('users').insert({
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        password: newUser.password,
+        role: newUser.role,
+        is_approved: false,
+        igid: (newUser as any).igid || null
+      }).then(({ error }) => {
+        if (error) console.error('Supabase register error:', error);
+      });
+    }
+
     const authority = (newUser.role === 'admin' || newUser.role === 'igl' || newUser.role === 'coach')
       ? 'Master Admin (Shaam)'
       : 'Master Admin or Admin/IGL';
@@ -393,6 +622,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setUsers((prev) => prev.map((u) => (u.id === userId ? updatedUser : u)));
 
+    if (supabase) {
+      supabase.from('users').update({ is_approved: true }).eq('id', userId).then(({ error }) => {
+        if (error) console.error('Supabase approve error:', error);
+      });
+    }
+
     // If player approved, ensure player card exists in roster
     if (target.role === 'player') {
       const alreadyHasCard = players.some((p) => p.name.toLowerCase() === target.name.toLowerCase());
@@ -401,12 +636,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           id: `p_${Date.now()}`,
           name: target.name,
           ign: target.name.toUpperCase(),
-          igid: 'Pending IGID',
+          igid: target.player_id || 'Pending IGID',
           role: 'assault',
           status: 'starter',
           join_date: new Date().toISOString().split('T')[0]
         };
         setPlayers((prev) => [...prev, newPlayer]);
+
+        if (supabase) {
+          supabase.from('players').insert({
+            id: newPlayer.id,
+            name: newPlayer.name,
+            in_game_name: newPlayer.ign,
+            igid: newPlayer.igid,
+            role: newPlayer.role,
+            status: newPlayer.status,
+            joined_date: newPlayer.join_date
+          }).then(({ error }) => {
+            if (error) console.error('Supabase auto player insert error:', error);
+          });
+        }
       }
     }
 
@@ -423,6 +672,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, status: 'rejected' } : u)));
+
+    if (supabase) {
+      supabase.from('users').delete().eq('id', userId).then(({ error }) => {
+        if (error) console.error('Supabase reject delete error:', error);
+      });
+    }
+
     return { success: true, message: `${target.name}'s registration request has been rejected.` };
   };
 
@@ -439,6 +695,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `p_${Date.now()}`
     };
     setPlayers((prev) => [...prev, newPlayer]);
+
+    if (supabase) {
+      supabase.from('players').insert({
+        id: newPlayer.id,
+        name: newPlayer.name,
+        in_game_name: newPlayer.ign,
+        igid: newPlayer.igid,
+        role: newPlayer.role,
+        status: newPlayer.status,
+        joined_date: newPlayer.join_date,
+        avatar: newPlayer.avatar || null
+      }).then(({ error }) => {
+        if (error) console.error('Supabase add player error:', error);
+      });
+    }
+
     return { success: true, message: `Player ${newPlayer.ign} added to roster.` };
   };
 
@@ -447,6 +719,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Permission Denied: Only Master Admin, Coach, IGL, and Admin can edit player information.' };
     }
     setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, ...updatedFields } : p)));
+
+    if (supabase) {
+      const updates: any = {};
+      if (updatedFields.name) updates.name = updatedFields.name;
+      if (updatedFields.ign) updates.in_game_name = updatedFields.ign;
+      if (updatedFields.igid) updates.igid = updatedFields.igid;
+      if (updatedFields.role) updates.role = updatedFields.role;
+      if (updatedFields.status) updates.status = updatedFields.status;
+      supabase.from('players').update(updates).eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase update player error:', error);
+      });
+    }
+
     return { success: true, message: 'Player details updated.' };
   };
 
@@ -455,6 +740,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Permission Denied: Only Master Admin, Coach, IGL, and Admin can remove players.' };
     }
     setPlayers((prev) => prev.filter((p) => p.id !== id));
+
+    if (supabase) {
+      supabase.from('players').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase delete player error:', error);
+      });
+    }
+
     return { success: true, message: 'Player removed from roster.' };
   };
 
@@ -485,10 +777,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addTournament = (data: Omit<Tournament, 'id'>) => {
     const newT: Tournament = { ...data, id: `t_${Date.now()}` };
     setTournaments((prev) => [newT, ...prev]);
+
+    if (supabase) {
+      supabase.from('tournaments').insert({
+        id: newT.id,
+        name: newT.name,
+        organizer: newT.organizer,
+        status: newT.status,
+        prize_pool: String(newT.prize_pool),
+        start_date: newT.start_date,
+        end_date: newT.end_date,
+        apply_link: newT.apply_link || null,
+        contact_info: newT.contact_info || null
+      }).then(({ error }) => {
+        if (error) console.error('Supabase add tournament error:', error);
+      });
+    }
   };
 
   const updateTournament = (id: string, updated: Partial<Tournament>) => {
     setTournaments((prev) => prev.map((t) => (t.id === id ? { ...t, ...updated } : t)));
+
+    if (supabase) {
+      const updates: any = {};
+      if (updated.name) updates.name = updated.name;
+      if (updated.status) updates.status = updated.status;
+      if (updated.apply_link !== undefined) updates.apply_link = updated.apply_link;
+      if (updated.contact_info !== undefined) updates.contact_info = updated.contact_info;
+      supabase.from('tournaments').update(updates).eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase update tournament error:', error);
+      });
+    }
   };
 
   // Matches, Stats, & Screenshot Management
@@ -537,11 +856,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setMatches((prev) => [newMatch, ...prev]);
     setPlayerStats((prev) => [...prev, ...calculatedStats]);
+
+    if (supabase) {
+      supabase.from('matches').insert({
+        id: newMatch.id,
+        tournament_id: newMatch.tournament_id,
+        tournament_name: '',
+        match_number: newMatch.match_number,
+        map: newMatch.map,
+        placement: statsData[0]?.placement || 1,
+        kills: statsData.reduce((acc, curr) => acc + curr.kills, 0),
+        total_points: calculatedStats.reduce((acc, curr) => acc + curr.total_points, 0),
+        date: newMatch.match_date,
+        screenshot_url: attachedScreenshot?.data_url || null,
+        screenshot_name: attachedScreenshot?.name || null,
+        notes: attachedScreenshot?.description || null
+      }).then(({ error }) => {
+        if (error) console.error('Supabase match insert error:', error);
+      });
+    }
   };
 
   const deleteMatch = (matchId: string) => {
     setMatches((prev) => prev.filter((m) => m.id !== matchId));
     setPlayerStats((prev) => prev.filter((s) => s.match_id !== matchId));
+
+    if (supabase) {
+      supabase.from('matches').delete().eq('id', matchId).then(({ error }) => {
+        if (error) console.error('Supabase match delete error:', error);
+      });
+    }
   };
 
   const updateScreenshot = (matchId: string, name: string, description: string) => {
@@ -583,6 +927,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       comments: []
     };
     setTasks((prev) => [newTask, ...prev]);
+
+    if (supabase) {
+      supabase.from('tasks').insert({
+        id: newTask.id,
+        title: newTask.title,
+        description: newTask.description,
+        assigned_to_name: 'Squad',
+        priority: newTask.priority,
+        status: newTask.status,
+        category: newTask.category,
+        due_date: newTask.due_date
+      }).then(({ error }) => {
+        if (error) console.error('Supabase task insert error:', error);
+      });
+    }
   };
 
   const updateTaskStatus = (taskId: string, newStatus: TaskStatus): { success: boolean; message: string } => {
@@ -610,6 +969,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
+    if (supabase) {
+      supabase.from('tasks').update({ status: newStatus }).eq('id', taskId).then(({ error }) => {
+        if (error) console.error('Supabase task status update error:', error);
+      });
+    }
+
     return { success: true, message: `Task moved to ${newStatus}` };
   };
 
@@ -630,11 +995,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Financial Ledger
   const addInvestment = (inv: Omit<Investment, 'id'>) => {
-    setInvestments((prev) => [{ ...inv, id: `inv_${Date.now()}` }, ...prev]);
+    const newInv = { ...inv, id: `inv_${Date.now()}` };
+    setInvestments((prev) => [newInv, ...prev]);
+
+    if (supabase) {
+      supabase.from('investments').insert({
+        id: newInv.id,
+        title: newInv.note || 'Team Expense',
+        category: newInv.type,
+        amount: newInv.amount,
+        date: newInv.spent_date,
+        notes: newInv.note
+      }).then(({ error }) => {
+        if (error) console.error('Supabase add investment error:', error);
+      });
+    }
   };
 
   const addReturn = (ret: Omit<FinancialReturn, 'id'>) => {
-    setReturns((prev) => [{ ...ret, id: `ret_${Date.now()}` }, ...prev]);
+    const newRet = { ...ret, id: `ret_${Date.now()}` };
+    setReturns((prev) => [newRet, ...prev]);
+
+    if (supabase) {
+      supabase.from('returns').insert({
+        id: newRet.id,
+        title: newRet.note || 'Team Return',
+        source: newRet.type,
+        amount: newRet.amount,
+        date: newRet.received_date,
+        notes: newRet.note
+      }).then(({ error }) => {
+        if (error) console.error('Supabase add return error:', error);
+      });
+    }
   };
 
   const resetToSeedData = () => {
