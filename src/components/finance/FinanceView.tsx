@@ -31,6 +31,28 @@ export const FinanceView: React.FC = () => {
   const [feedbackBanner, setFeedbackBanner] = useState<string | null>(null);
 
   const canManageFinance = currentUser ? ['master_admin', 'admin', 'igl'].includes(currentUser.role) : true;
+  const canDelete = currentUser ? ['master_admin', 'admin', 'igl'].includes(currentUser.role) : true;
+
+  // Custom in-app delete confirmation modal (bulletproof across all browsers)
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState<{
+    type: 'investment' | 'return';
+    id: string;
+    note: string;
+    amount: number;
+  } | null>(null);
+
+  const confirmAndExecuteDelete = () => {
+    if (!deleteConfirmItem) return;
+    if (deleteConfirmItem.type === 'investment') {
+      deleteInvestment(deleteConfirmItem.id);
+      setFeedbackBanner(`Expense entry "${deleteConfirmItem.note}" (-₹${deleteConfirmItem.amount.toLocaleString('en-IN')}) permanently deleted.`);
+    } else {
+      deleteReturn(deleteConfirmItem.id);
+      setFeedbackBanner(`Revenue entry "${deleteConfirmItem.note}" (+₹${deleteConfirmItem.amount.toLocaleString('en-IN')}) permanently deleted.`);
+    }
+    setDeleteConfirmItem(null);
+    setTimeout(() => setFeedbackBanner(null), 3500);
+  };
 
   // Form State
   const [amount, setAmount] = useState<number>(15000);
@@ -84,22 +106,6 @@ export const FinanceView: React.FC = () => {
     setNote(ret.note);
     setDate(ret.received_date);
     setIsModalOpen(true);
-  };
-
-  const handleDeleteInvestment = (inv: Investment) => {
-    if (confirm(`Are you sure you want to delete expense "${inv.note}" (₹${inv.amount.toLocaleString('en-IN')})?`)) {
-      deleteInvestment(inv.id);
-      setFeedbackBanner(`Expense entry "${inv.note}" deleted successfully.`);
-      setTimeout(() => setFeedbackBanner(null), 3500);
-    }
-  };
-
-  const handleDeleteReturn = (ret: FinancialReturn) => {
-    if (confirm(`Are you sure you want to delete revenue entry "${ret.note}" (+₹${ret.amount.toLocaleString('en-IN')})?`)) {
-      deleteReturn(ret.id);
-      setFeedbackBanner(`Revenue entry "${ret.note}" deleted successfully.`);
-      setTimeout(() => setFeedbackBanner(null), 3500);
-    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -326,9 +332,14 @@ export const FinanceView: React.FC = () => {
                             <span>Edit</span>
                           </button>
                           <button
-                            onClick={() => handleDeleteInvestment(inv)}
+                            onClick={() => setDeleteConfirmItem({
+                              type: 'investment',
+                              id: inv.id,
+                              note: inv.note,
+                              amount: inv.amount
+                            })}
                             className="btn btn-danger"
-                            title="Delete Expense"
+                            title="Delete Expense (Admin/Super Admin)"
                             style={{ padding: '4px 9px', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                           >
                             <Trash2 size={12} />
@@ -397,9 +408,14 @@ export const FinanceView: React.FC = () => {
                             <span>Edit</span>
                           </button>
                           <button
-                            onClick={() => handleDeleteReturn(ret)}
+                            onClick={() => setDeleteConfirmItem({
+                              type: 'return',
+                              id: ret.id,
+                              note: ret.note,
+                              amount: ret.amount
+                            })}
                             className="btn btn-danger"
-                            title="Delete Revenue Entry"
+                            title="Delete Revenue Entry (Admin/Super Admin)"
                             style={{ padding: '4px 9px', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                           >
                             <Trash2 size={12} />
@@ -523,17 +539,154 @@ export const FinanceView: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-secondary">
-                  Cancel
-                </button>
-                <button type="submit" className={modalType === 'investment' ? 'btn btn-danger' : 'btn btn-primary'}>
-                  {editingEntry
-                    ? (modalType === 'investment' ? 'Update Expense Record' : 'Update Revenue Entry')
-                    : (modalType === 'investment' ? 'Save Expense' : 'Save Income')}
-                </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
+                {editingEntry && canDelete ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idToDelete = editingEntry.id;
+                      const typeToDelete = editingEntry.type;
+                      const noteToDelete = note;
+                      const amountToDelete = Number(amount);
+                      setIsModalOpen(false);
+                      setDeleteConfirmItem({
+                        type: typeToDelete,
+                        id: idToDelete,
+                        note: noteToDelete,
+                        amount: amountToDelete
+                      });
+                    }}
+                    className="btn btn-danger"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.8rem',
+                      padding: '8px 14px',
+                      border: '1px solid rgba(239, 68, 68, 0.4)'
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    <span>Delete This Entry</span>
+                  </button>
+                ) : <div />}
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-secondary">
+                    Cancel
+                  </button>
+                  <button type="submit" className={modalType === 'investment' ? 'btn btn-danger' : 'btn btn-primary'}>
+                    {editingEntry
+                      ? (modalType === 'investment' ? 'Update Expense Record' : 'Update Revenue Entry')
+                      : (modalType === 'investment' ? 'Save Expense' : 'Save Income')}
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bulletproof In-App Delete Confirmation Modal (Admin & Super Admin Privilege) */}
+      {deleteConfirmItem && (
+        <div className="modal-backdrop" onClick={() => setDeleteConfirmItem(null)} style={{ zIndex: 1100 }}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '460px',
+              padding: '24px',
+              border: '1px solid rgba(239, 68, 68, 0.5)',
+              boxShadow: '0 16px 48px rgba(239, 68, 68, 0.25)',
+              background: '#0d0d10'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ef4444',
+                  flexShrink: 0
+                }}
+              >
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Admin / Super Admin Privilege • Delete
+                </div>
+                <h3 style={{ fontSize: '1.2rem', color: '#ffffff', fontWeight: 800, margin: '2px 0 0 0' }}>
+                  Delete {deleteConfirmItem.type === 'investment' ? 'Expense Record' : 'Revenue Entry'}?
+                </h3>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#16161a',
+                borderRadius: '8px',
+                padding: '14px 16px',
+                border: '1px solid #27272a',
+                marginBottom: '16px'
+              }}
+            >
+              <div style={{ fontSize: '0.8rem', color: '#a1a1aa', marginBottom: '4px' }}>
+                Description / Title:
+              </div>
+              <div style={{ fontSize: '0.95rem', color: '#ffffff', fontWeight: 700, marginBottom: '10px' }}>
+                "{deleteConfirmItem.note}"
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #27272a', paddingTop: '10px' }}>
+                <span style={{ fontSize: '0.8rem', color: '#71717a' }}>Amount:</span>
+                <span
+                  style={{
+                    fontSize: '1.25rem',
+                    fontWeight: 900,
+                    color: deleteConfirmItem.type === 'investment' ? '#ef4444' : 'var(--bar-green)'
+                  }}
+                >
+                  {deleteConfirmItem.type === 'investment' ? '-' : '+'}₹{deleteConfirmItem.amount.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.82rem', color: '#a1a1aa', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+              Are you sure you want to permanently delete this entry? This action will immediately remove it from the live database, update team ROI and P&L calculations.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmItem(null)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmAndExecuteDelete}
+                className="btn btn-danger"
+                style={{
+                  padding: '8px 20px',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Trash2 size={16} />
+                <span>Confirm Delete</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

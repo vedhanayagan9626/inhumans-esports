@@ -32,6 +32,15 @@ export const RosterView: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [swapModalTarget, setSwapModalTarget] = useState<Player | null>(null);
   const [feedbackBanner, setFeedbackBanner] = useState<string | null>(null);
+  const [playerToDelete, setPlayerToDelete] = useState<Player | null>(null);
+
+  const confirmDeletePlayer = () => {
+    if (!playerToDelete) return;
+    const res = deletePlayer(playerToDelete.id);
+    setFeedbackBanner(res.message);
+    setTimeout(() => setFeedbackBanner(null), 3500);
+    setPlayerToDelete(null);
+  };
 
   // Form State
   const [formData, setFormData] = useState({
@@ -499,13 +508,10 @@ export const RosterView: React.FC = () => {
 
                   {canManageRoster && (
                     <button
-                      onClick={() => {
-                        if (confirm(`Remove ${player.ign} from the squad?`)) {
-                          deletePlayer(player.id);
-                        }
-                      }}
+                      onClick={() => setPlayerToDelete(player)}
                       className="btn btn-danger"
                       style={{ padding: '5px 10px', fontSize: '0.75rem' }}
+                      title="Remove Player (Admin/Super Admin)"
                     >
                       <Trash2 size={12} />
                       <span>Remove</span>
@@ -724,19 +730,139 @@ export const RosterView: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="btn btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingPlayer ? 'Save Changes' : 'Add Player to Squad'}
-                </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
+                {editingPlayer && canManageRoster ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = editingPlayer;
+                      setIsAddModalOpen(false);
+                      setPlayerToDelete(target);
+                    }}
+                    className="btn btn-danger"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.8rem',
+                      padding: '8px 14px',
+                      border: '1px solid rgba(239, 68, 68, 0.4)'
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    <span>Remove From Squad</span>
+                  </button>
+                ) : <div />}
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="btn btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    {editingPlayer ? 'Save Changes' : 'Add Player to Squad'}
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Player Remove Confirmation Modal (Admin & Super Admin Privilege) */}
+      {playerToDelete && (
+        <div className="modal-backdrop" onClick={() => setPlayerToDelete(null)} style={{ zIndex: 1100 }}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '460px',
+              padding: '24px',
+              border: '1px solid rgba(239, 68, 68, 0.5)',
+              boxShadow: '0 16px 48px rgba(239, 68, 68, 0.25)',
+              background: '#0d0d10'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ef4444',
+                  flexShrink: 0
+                }}
+              >
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Admin / Super Admin Access • Roster Management
+                </div>
+                <h3 style={{ fontSize: '1.2rem', color: '#ffffff', fontWeight: 800, margin: '2px 0 0 0' }}>
+                  Remove Player from Squad?
+                </h3>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#16161a',
+                borderRadius: '8px',
+                padding: '14px 16px',
+                border: '1px solid #27272a',
+                marginBottom: '16px'
+              }}
+            >
+              <div style={{ fontSize: '0.8rem', color: '#a1a1aa', marginBottom: '4px' }}>
+                Player IGN & Name:
+              </div>
+              <div style={{ fontSize: '1.05rem', color: '#ffffff', fontWeight: 800, marginBottom: '6px' }}>
+                {playerToDelete.ign} ({playerToDelete.name})
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#71717a' }}>
+                Role: <span style={{ color: '#ffffff', fontWeight: 600 }}>{playerToDelete.role.toUpperCase()}</span> • Status: <span style={{ color: 'var(--bar-green)', fontWeight: 600 }}>{playerToDelete.status.toUpperCase()}</span> • IGID: <span style={{ color: '#a1a1aa' }}>{playerToDelete.igid}</span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.82rem', color: '#a1a1aa', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+              Are you sure you want to remove this player from the official squad roster? This action is immediate across live devices and Supabase.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setPlayerToDelete(null)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeletePlayer}
+                className="btn btn-danger"
+                style={{
+                  padding: '8px 20px',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Trash2 size={16} />
+                <span>Confirm Remove</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

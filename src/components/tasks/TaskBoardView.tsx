@@ -33,6 +33,7 @@ export const TaskBoardView: React.FC = () => {
   const [commentInput, setCommentInput] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [permissionAlert, setPermissionAlert] = useState<string | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
   const [newTaskData, setNewTaskData] = useState({
     title: '',
@@ -94,14 +95,18 @@ export const TaskBoardView: React.FC = () => {
     setIsCreateModalOpen(true);
   };
 
-  const handleDeleteTask = (taskId: string, e?: React.MouseEvent) => {
+  const handleDeleteTask = (task: Task, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (confirm('Are you sure you want to delete this drill / task?')) {
-      deleteTask(taskId);
-      if (activeTaskModal?.id === taskId) {
-        setActiveTaskModal(null);
-      }
+    setTaskToDelete(task);
+  };
+
+  const confirmDeleteTask = () => {
+    if (!taskToDelete) return;
+    deleteTask(taskToDelete.id);
+    if (activeTaskModal?.id === taskToDelete.id) {
+      setActiveTaskModal(null);
     }
+    setTaskToDelete(null);
   };
 
   const handleStatusChange = (taskId: string, targetStatus: TaskStatus) => {
@@ -329,7 +334,7 @@ export const TaskBoardView: React.FC = () => {
                               <Edit2 size={11} />
                             </button>
                             <button
-                              onClick={(e) => handleDeleteTask(task.id, e)}
+                              onClick={(e) => handleDeleteTask(task, e)}
                               className="btn btn-danger"
                               title="Delete Drill"
                               style={{ padding: '2px 5px', fontSize: '0.65rem' }}
@@ -444,7 +449,7 @@ export const TaskBoardView: React.FC = () => {
                   <span>Edit</span>
                 </button>
                 <button
-                  onClick={(e) => handleDeleteTask(activeTaskModal.id, e)}
+                  onClick={(e) => handleDeleteTask(activeTaskModal, e)}
                   className="btn btn-danger"
                   style={{ padding: '5px 10px', fontSize: '0.75rem' }}
                 >
@@ -628,15 +633,135 @@ export const TaskBoardView: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
-                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="btn btn-secondary">
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingTask ? 'Update Drill' : 'Assign Drill'}
-                </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
+                {editingTask ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = editingTask;
+                      setIsCreateModalOpen(false);
+                      setTaskToDelete(target);
+                    }}
+                    className="btn btn-danger"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.8rem',
+                      padding: '8px 14px',
+                      border: '1px solid rgba(239, 68, 68, 0.4)'
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    <span>Delete Drill</span>
+                  </button>
+                ) : <div />}
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button type="button" onClick={() => setIsCreateModalOpen(false)} className="btn btn-secondary">
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    {editingTask ? 'Update Drill' : 'Assign Drill'}
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Drill Delete Confirmation Modal (Admin & Super Admin Privilege) */}
+      {taskToDelete && (
+        <div className="modal-backdrop" onClick={() => setTaskToDelete(null)} style={{ zIndex: 1100 }}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '460px',
+              padding: '24px',
+              border: '1px solid rgba(239, 68, 68, 0.5)',
+              boxShadow: '0 16px 48px rgba(239, 68, 68, 0.25)',
+              background: '#0d0d10'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ef4444',
+                  flexShrink: 0
+                }}
+              >
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Tactical Command • Delete Drill
+                </div>
+                <h3 style={{ fontSize: '1.2rem', color: '#ffffff', fontWeight: 800, margin: '2px 0 0 0' }}>
+                  Delete Drill / Task?
+                </h3>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#16161a',
+                borderRadius: '8px',
+                padding: '14px 16px',
+                border: '1px solid #27272a',
+                marginBottom: '16px'
+              }}
+            >
+              <div style={{ fontSize: '0.8rem', color: '#a1a1aa', marginBottom: '4px' }}>
+                Drill Title:
+              </div>
+              <div style={{ fontSize: '1.05rem', color: '#ffffff', fontWeight: 800, marginBottom: '6px' }}>
+                {taskToDelete.title}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#71717a' }}>
+                Category: <span style={{ color: '#ffffff', fontWeight: 600 }}>{taskToDelete.category.toUpperCase()}</span> • Priority: <span style={{ color: '#f59e0b', fontWeight: 600 }}>{taskToDelete.priority.toUpperCase()}</span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.82rem', color: '#a1a1aa', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+              Are you sure you want to delete this drill? It will be removed from the team tactical board and live database.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setTaskToDelete(null)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteTask}
+                className="btn btn-danger"
+                style={{
+                  padding: '8px 20px',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Trash2 size={16} />
+                <span>Confirm Delete</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

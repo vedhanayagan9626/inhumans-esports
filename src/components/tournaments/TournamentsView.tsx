@@ -23,6 +23,7 @@ interface TournamentsViewProps {
 
 export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEntry }) => {
   const {
+    currentUser,
     tournaments,
     addTournament,
     updateTournament,
@@ -34,12 +35,18 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEnt
     deleteScreenshot
   } = useApp();
 
+  const isSuperAdmin = currentUser?.role === 'master_admin';
+  const isAdmin = currentUser?.role === 'admin';
+  const isIgl = currentUser?.role === 'igl';
+  const canDeleteTournament = !currentUser || isSuperAdmin || isAdmin || isIgl;
+
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedTournamentId, setSelectedTournamentId] = useState<string>(
     tournaments.find((t) => t.status === 'ongoing')?.id || tournaments[0]?.id || ''
   );
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
+  const [tournamentToDelete, setTournamentToDelete] = useState<Tournament | null>(null);
   const [activeScreenshotModal, setActiveScreenshotModal] = useState<{
     screenshot: MatchScreenshot;
     matchId: string;
@@ -130,12 +137,16 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEnt
 
   const handleDeleteTournament = (t: Tournament, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (confirm(`Are you sure you want to delete tournament "${t.name}" and all its match data?`)) {
-      deleteTournament(t.id);
-      if (selectedTournamentId === t.id) {
-        setSelectedTournamentId(tournaments.find((item) => item.id !== t.id)?.id || '');
-      }
+    setTournamentToDelete(t);
+  };
+
+  const confirmDeleteTournament = () => {
+    if (!tournamentToDelete) return;
+    deleteTournament(tournamentToDelete.id);
+    if (selectedTournamentId === tournamentToDelete.id) {
+      setSelectedTournamentId(tournaments.find((item) => item.id !== tournamentToDelete.id)?.id || '');
     }
+    setTournamentToDelete(null);
   };
 
   const handleAddSubmit = (e: React.FormEvent) => {
@@ -711,15 +722,135 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEnt
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
-                <button type="button" onClick={() => setIsAddModalOpen(false)} className="btn btn-secondary">
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingTournament ? 'Update Tournament' : 'Save Tournament'}
-                </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
+                {editingTournament && canDeleteTournament ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = editingTournament;
+                      setIsAddModalOpen(false);
+                      setTournamentToDelete(target);
+                    }}
+                    className="btn btn-danger"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.8rem',
+                      padding: '8px 14px',
+                      border: '1px solid rgba(239, 68, 68, 0.4)'
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    <span>Delete Tournament</span>
+                  </button>
+                ) : <div />}
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button type="button" onClick={() => setIsAddModalOpen(false)} className="btn btn-secondary">
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    {editingTournament ? 'Update Tournament' : 'Save Tournament'}
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Tournament Delete Confirmation Modal (Admin & Super Admin Privilege) */}
+      {tournamentToDelete && (
+        <div className="modal-backdrop" onClick={() => setTournamentToDelete(null)} style={{ zIndex: 1100 }}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '460px',
+              padding: '24px',
+              border: '1px solid rgba(239, 68, 68, 0.5)',
+              boxShadow: '0 16px 48px rgba(239, 68, 68, 0.25)',
+              background: '#0d0d10'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ef4444',
+                  flexShrink: 0
+                }}
+              >
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Admin / Super Admin Access • Delete
+                </div>
+                <h3 style={{ fontSize: '1.2rem', color: '#ffffff', fontWeight: 800, margin: '2px 0 0 0' }}>
+                  Delete Tournament?
+                </h3>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#16161a',
+                borderRadius: '8px',
+                padding: '14px 16px',
+                border: '1px solid #27272a',
+                marginBottom: '16px'
+              }}
+            >
+              <div style={{ fontSize: '0.8rem', color: '#a1a1aa', marginBottom: '4px' }}>
+                Tournament Name:
+              </div>
+              <div style={{ fontSize: '1.05rem', color: '#ffffff', fontWeight: 800, marginBottom: '6px' }}>
+                {tournamentToDelete.name}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#71717a' }}>
+                Organizer: <span style={{ color: '#ffffff', fontWeight: 600 }}>{tournamentToDelete.organizer || 'Official'}</span> • Prize Pool: <span style={{ color: 'var(--bar-green)', fontWeight: 700 }}>₹{tournamentToDelete.prize_pool.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.82rem', color: '#a1a1aa', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+              Are you sure you want to delete this tournament? This will permanently remove the tournament registration and all related match records from live Supabase.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setTournamentToDelete(null)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteTournament}
+                className="btn btn-danger"
+                style={{
+                  padding: '8px 20px',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Trash2 size={16} />
+                <span>Confirm Delete</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

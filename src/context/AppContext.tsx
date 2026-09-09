@@ -526,6 +526,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'returns' }, () => {
+        client.from('returns').select('*').then(({ data }) => {
+          if (data) {
+            setReturns(data.map((r: any) => ({
+              id: r.id,
+              type: (r.source as any) || 'prize',
+              amount: Number(r.amount) || 0,
+              received_date: r.date || new Date().toISOString().split('T')[0],
+              note: r.notes || r.title || 'Income'
+            })));
+          }
+        });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'investments' }, () => {
+        client.from('investments').select('*').then(({ data }) => {
+          if (data) {
+            setInvestments(data.map((i: any) => ({
+              id: i.id,
+              type: (i.category as any) || 'scrims',
+              amount: Number(i.amount) || 0,
+              spent_date: i.date || new Date().toISOString().split('T')[0],
+              note: i.notes || i.title || 'Expense'
+            })));
+          }
+        });
+      })
       .subscribe();
 
     return () => {
@@ -843,7 +869,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!canChangePlayerRole && !canManageRoster) {
       return { success: false, message: 'Permission Denied: Only Master Admin, Admin, and IGL can remove players from squad.' };
     }
-    setPlayers((prev) => prev.filter((p) => p.id !== id));
+    setPlayers((prev) => prev.filter((p) => String(p.id) !== String(id)));
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY}_players`);
+      if (saved) {
+        const filtered = JSON.parse(saved).filter((p: any) => String(p.id) !== String(id));
+        localStorage.setItem(`${STORAGE_KEY}_players`, JSON.stringify(filtered));
+      }
+    } catch (e) {
+      console.error(e);
+    }
 
     if (supabase) {
       supabase.from('players').delete().eq('id', id).then(({ error }) => {
@@ -982,8 +1017,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteMatch = (matchId: string) => {
-    setMatches((prev) => prev.filter((m) => m.id !== matchId));
-    setPlayerStats((prev) => prev.filter((s) => s.match_id !== matchId));
+    setMatches((prev) => prev.filter((m) => String(m.id) !== String(matchId)));
+    setPlayerStats((prev) => prev.filter((s) => String(s.match_id) !== String(matchId)));
+    try {
+      const savedM = localStorage.getItem(`${STORAGE_KEY}_matches`);
+      if (savedM) {
+        const filtered = JSON.parse(savedM).filter((m: any) => String(m.id) !== String(matchId));
+        localStorage.setItem(`${STORAGE_KEY}_matches`, JSON.stringify(filtered));
+      }
+      const savedS = localStorage.getItem(`${STORAGE_KEY}_stats`);
+      if (savedS) {
+        const filteredS = JSON.parse(savedS).filter((s: any) => String(s.match_id) !== String(matchId));
+        localStorage.setItem(`${STORAGE_KEY}_stats`, JSON.stringify(filteredS));
+      }
+    } catch (e) {
+      console.error(e);
+    }
 
     if (supabase) {
       supabase.from('matches').delete().eq('id', matchId).then(({ error }) => {
@@ -1136,7 +1185,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Tournament Delete
   const deleteTournament = (id: string) => {
-    setTournaments((prev) => prev.filter((t) => t.id !== id));
+    setTournaments((prev) => prev.filter((t) => String(t.id) !== String(id)));
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY}_tournaments`);
+      if (saved) {
+        const filtered = JSON.parse(saved).filter((t: any) => String(t.id) !== String(id));
+        localStorage.setItem(`${STORAGE_KEY}_tournaments`, JSON.stringify(filtered));
+      }
+    } catch (e) {
+      console.error(e);
+    }
     if (supabase) {
       supabase.from('tournaments').delete().eq('id', id).then(({ error }) => {
         if (error) console.error('Supabase delete tournament error:', error);
@@ -1146,7 +1204,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Task Edit & Delete
   const editTask = (id: string, updated: Partial<Task>) => {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updated } : t)));
+    setTasks((prev) => prev.map((t) => (String(t.id) === String(id) ? { ...t, ...updated } : t)));
     if (supabase) {
       const updates: any = {};
       if (updated.title) updates.title = updated.title;
@@ -1161,7 +1219,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteTask = (id: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
+    setTasks((prev) => prev.filter((t) => String(t.id) !== String(id)));
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY}_tasks`);
+      if (saved) {
+        const filtered = JSON.parse(saved).filter((t: any) => String(t.id) !== String(id));
+        localStorage.setItem(`${STORAGE_KEY}_tasks`, JSON.stringify(filtered));
+      }
+    } catch (e) {
+      console.error(e);
+    }
     if (supabase) {
       supabase.from('tasks').delete().eq('id', id).then(({ error }) => {
         if (error) console.error('Supabase delete task error:', error);
@@ -1188,7 +1255,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteInvestment = (id: string) => {
-    setInvestments((prev) => prev.filter((i) => i.id !== id));
+    setInvestments((prev) => prev.filter((i) => String(i.id) !== String(id)));
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY}_investments`);
+      if (saved) {
+        const filtered = JSON.parse(saved).filter((i: any) => String(i.id) !== String(id));
+        localStorage.setItem(`${STORAGE_KEY}_investments`, JSON.stringify(filtered));
+      }
+    } catch (e) {
+      console.error(e);
+    }
     if (supabase) {
       supabase.from('investments').delete().eq('id', id).then(({ error }) => {
         if (error) console.error('Supabase delete investment error:', error);
@@ -1197,7 +1273,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateReturn = (id: string, updated: Partial<FinancialReturn>) => {
-    setReturns((prev) => prev.map((r) => (r.id === id ? { ...r, ...updated } : r)));
+    setReturns((prev) => prev.map((r) => (String(r.id) === String(id) ? { ...r, ...updated } : r)));
     if (supabase) {
       const updates: any = {};
       if (updated.note !== undefined) {
@@ -1214,7 +1290,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteReturn = (id: string) => {
-    setReturns((prev) => prev.filter((r) => r.id !== id));
+    setReturns((prev) => prev.filter((r) => String(r.id) !== String(id)));
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY}_returns`);
+      if (saved) {
+        const filtered = JSON.parse(saved).filter((r: any) => String(r.id) !== String(id));
+        localStorage.setItem(`${STORAGE_KEY}_returns`, JSON.stringify(filtered));
+      }
+    } catch (e) {
+      console.error(e);
+    }
     if (supabase) {
       supabase.from('returns').delete().eq('id', id).then(({ error }) => {
         if (error) console.error('Supabase delete return error:', error);
