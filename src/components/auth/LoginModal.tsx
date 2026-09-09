@@ -58,17 +58,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  const handleQuickDemoLogin = (userEmail: string) => {
-    const res = login(userEmail);
-    if (res.success) {
-      setSuccessMsg(res.message);
-      setTimeout(() => {
-        setSuccessMsg(null);
-        onClose();
-      }, 800);
-    }
-  };
-
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px', padding: '24px' }}>
@@ -121,51 +110,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
           </div>
         )}
 
-        {/* Quick Demo Login Buttons */}
-        <div style={{
-          background: 'var(--bg-surface-elevated)',
-          borderRadius: '8px',
-          padding: '12px',
-          marginBottom: '18px',
-          border: '1px solid var(--border-subtle)'
-        }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px' }}>
-            FAST DEMO ROLE ACCESS (ONE-CLICK LOGIN)
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            {users.map((u) => {
-              const isCurrent = currentUser?.id === u.id;
-              return (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => handleQuickDemoLogin(u.email)}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    background: isCurrent ? '#dbeafe' : '#ffffff',
-                    border: isCurrent ? '1px solid var(--accent-blue)' : '1px solid var(--border-subtle)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
-                >
-                  <span style={{ fontSize: '1.1rem' }}>{u.avatar}</span>
-                  <div>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {u.name.split(' ')[0]}
-                    </div>
-                    <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>
-                      {u.role.toUpperCase()}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
 
         {/* Tab switch */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', marginBottom: '16px' }}>
@@ -215,7 +159,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 <input
                   type="email"
                   required
-                  placeholder="e.g. coach@soulfire.gg"
+                  autoComplete="username"
+                  placeholder="e.g. coach@inhumans.gg"
                   className="input-control"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -230,6 +175,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
               <input
                 type="password"
                 required
+                autoComplete="current-password"
                 placeholder="Enter password"
                 className="input-control"
                 value={password}

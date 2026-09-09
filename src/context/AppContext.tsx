@@ -11,6 +11,8 @@ import {
   FinancialReturn,
   TaskStatus,
   UserRole,
+  PlayerRole,
+  PlayerStatus,
   MatchScreenshot,
   AuthSession
 } from '../types';
@@ -36,12 +38,14 @@ interface AppContextType {
   approveUser: (userId: string) => { success: boolean; message: string };
   rejectUser: (userId: string) => { success: boolean; message: string };
 
-  // Players & Permissions (Master Admin, Coach, IGL, Admin can manage)
+  // Players & Permissions (Master Admin, Coach, IGL, Admin can manage; Admin & IGL can change role & starters)
   players: Player[];
   canManageRoster: boolean;
+  canChangePlayerRole: boolean;
   addPlayer: (player: Omit<Player, 'id'>) => { success: boolean; message: string };
   updatePlayer: (id: string, player: Partial<Player>) => { success: boolean; message: string };
   deletePlayer: (id: string) => { success: boolean; message: string };
+  swapStarter: (currentStarterId: string, standbyPlayerId: string) => { success: boolean; message: string };
 
   // Points Systems
   pointsSystems: PointsSystem[];
@@ -57,6 +61,7 @@ interface AppContextType {
   tournaments: Tournament[];
   addTournament: (tournament: Omit<Tournament, 'id'>) => void;
   updateTournament: (id: string, tournament: Partial<Tournament>) => void;
+  deleteTournament: (id: string) => void;
 
   // Matches, Stats & Screenshots
   matches: Match[];
@@ -73,6 +78,8 @@ interface AppContextType {
   // Tasks
   tasks: Task[];
   createTask: (task: Omit<Task, 'id' | 'created_at' | 'comments'>) => void;
+  editTask: (id: string, updated: Partial<Task>) => void;
+  deleteTask: (id: string) => void;
   updateTaskStatus: (taskId: string, newStatus: TaskStatus) => { success: boolean; message: string };
   addTaskComment: (taskId: string, commentText: string) => void;
 
@@ -80,7 +87,11 @@ interface AppContextType {
   investments: Investment[];
   returns: FinancialReturn[];
   addInvestment: (inv: Omit<Investment, 'id'>) => void;
+  updateInvestment: (id: string, updated: Partial<Investment>) => void;
+  deleteInvestment: (id: string) => void;
   addReturn: (ret: Omit<FinancialReturn, 'id'>) => void;
+  updateReturn: (id: string, updated: Partial<FinancialReturn>) => void;
+  deleteReturn: (id: string) => void;
 
   // Reset Data
   resetToSeedData: () => void;
@@ -302,19 +313,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // 2. Live Players
         const { data: playersData, error: playersErr } = await client.from('players').select('*');
+        let mappedPlayers: Player[] = [];
         if (!playersErr && playersData && playersData.length > 0) {
-          const mappedPlayers: Player[] = playersData.map((p: any) => ({
+          mappedPlayers = playersData.map((p: any) => ({
             id: p.id,
             name: p.name,
             ign: p.in_game_name || p.name,
             igid: p.igid || 'Pending',
-            role: p.role || 'assault',
-            status: p.status || 'starter',
+            role: (p.role as PlayerRole) || 'assault',
+            status: (p.status as PlayerStatus) || 'starter',
             join_date: p.joined_date || new Date().toISOString().split('T')[0],
             avatar: p.avatar
           }));
-          setPlayers(mappedPlayers);
         }
+
+        // Ensure all approved IGLs and Players from usersData exist in mappedPlayers
+        if (usersData && usersData.length > 0) {
+          const approvedRosterUsers = usersData.filter((u: any) => u.is_approved && (u.role === 'igl' || u.role === 'player'));
+          approvedRosterUsers.forEach((u: any) => {
+            const exists = mappedPlayers.some(p => p.name.toLowerCase() === u.name.toLowerCase() || p.id === u.id || p.id === `p_${u.id}`);
+            if (!exists) {
+              const currentStarters = mappedPlayers.filter(p => p.status === 'starter').length;
+              const newCard: Player = {
+                id: `p_${u.id}`,
+                name: u.name,
+                ign: u.name.toUpperCase(),
+                igid: u.igid || 'Pending IGID',
+                role: u.role === 'igl' ? 'igl' : 'assault',
+                status: currentStarters < 4 ? 'starter' : 'standby',
+                join_date: u.created_at ? u.created_at.split('T')[0] : new Date().toISOString().split('T')[0]
+              };
+              mappedPlayers.push(newCard);
+              client.from('players').insert({
+                id: newCard.id,
+                name: newCard.name,
+                in_game_name: newCard.ign,
+                igid: newCard.igid,
+                role: newCard.role,
+                status: newCard.status,
+                joined_date: newCard.join_date
+              }).then(() => {});
+            }
+          });
+        }
+        setPlayers(mappedPlayers);
 
         // 3. Live Tournaments
         const { data: tournData, error: tournErr } = await client.from('tournaments').select('*');
@@ -628,17 +670,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    // If player approved, ensure player card exists in roster
-    if (target.role === 'player') {
-      const alreadyHasCard = players.some((p) => p.name.toLowerCase() === target.name.toLowerCase());
+    // If player or IGL approved, ensure player card exists in roster
+    if (target.role === 'player' || target.role === 'igl') {
+      const alreadyHasCard = players.some((p) => p.name.toLowerCase() === target.name.toLowerCase() || p.id === target.id);
       if (!alreadyHasCard) {
+        const currentStarters = players.filter((p) => p.status === 'starter').length;
         const newPlayer: Player = {
           id: `p_${Date.now()}`,
           name: target.name,
           ign: target.name.toUpperCase(),
-          igid: target.player_id || 'Pending IGID',
-          role: 'assault',
-          status: 'starter',
+          igid: (target as any).igid || target.player_id || 'Pending IGID',
+          role: target.role === 'igl' ? 'igl' : 'assault',
+          status: currentStarters < 4 ? 'starter' : 'standby',
           join_date: new Date().toISOString().split('T')[0]
         };
         setPlayers((prev) => [...prev, newPlayer]);
@@ -684,14 +727,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Permissions: Master Admin, Coach, IGL, and Admin can manage roster
   const canManageRoster = currentUser !== null && ['master_admin', 'coach', 'igl', 'admin'].includes(currentUser.role);
+  const canChangePlayerRole = currentUser !== null && ['master_admin', 'admin', 'igl'].includes(currentUser.role);
 
   // Player CRUD with permission check
   const addPlayer = (playerData: Omit<Player, 'id'>) => {
     if (!canManageRoster) {
       return { success: false, message: 'Permission Denied: Only Master Admin, Coach, IGL, and Admin can add roster players.' };
     }
+
+    // Check 4 starters limit if attempting to add as starter
+    const currentStarters = players.filter((p) => p.status === 'starter').length;
+    const finalStatus: PlayerStatus = (playerData.status === 'starter' && currentStarters >= 4)
+      ? 'standby'
+      : playerData.status;
+
     const newPlayer: Player = {
       ...playerData,
+      status: finalStatus,
       id: `p_${Date.now()}`
     };
     setPlayers((prev) => [...prev, newPlayer]);
@@ -711,33 +763,85 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    return { success: true, message: `Player ${newPlayer.ign} added to roster.` };
+    const notice = (playerData.status === 'starter' && currentStarters >= 4)
+      ? ' (Added to Standby because 4 starters already exist)'
+      : '';
+
+    return { success: true, message: `Player ${newPlayer.ign} added to roster${notice}.` };
   };
 
-  const updatePlayer = (id: string, updatedFields: Partial<Player>) => {
-    if (!canManageRoster) {
-      return { success: false, message: 'Permission Denied: Only Master Admin, Coach, IGL, and Admin can edit player information.' };
+  const updatePlayer = (id: string, updatedFields: Partial<Player>): { success: boolean; message: string } => {
+    const target = players.find(p => p.id === id);
+    if (!target) return { success: false, message: 'Player not found.' };
+
+    const isOwnProfile = currentUser && (
+      currentUser.name.toLowerCase() === target.name.toLowerCase() ||
+      currentUser.email.toLowerCase() === target.name.toLowerCase()
+    );
+
+    if (!canManageRoster && !isOwnProfile) {
+      return { success: false, message: 'Permission Denied: You cannot edit this player profile.' };
     }
-    setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, ...updatedFields } : p)));
+
+    const fieldsToApply: Partial<Player> = { ...updatedFields };
+
+    // Player only has privilege to change their details, NOT assigned role or starter status
+    if (!canChangePlayerRole) {
+      delete fieldsToApply.role;
+      delete fieldsToApply.status;
+    } else if (fieldsToApply.status === 'starter' && target.status !== 'starter') {
+      const currentStarters = players.filter(p => p.status === 'starter' && p.id !== id);
+      if (currentStarters.length >= 4) {
+        return { success: false, message: 'Starter squad is full (4/4). Please swap with an existing starter.' };
+      }
+    }
+
+    setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, ...fieldsToApply } : p)));
 
     if (supabase) {
       const updates: any = {};
-      if (updatedFields.name) updates.name = updatedFields.name;
-      if (updatedFields.ign) updates.in_game_name = updatedFields.ign;
-      if (updatedFields.igid) updates.igid = updatedFields.igid;
-      if (updatedFields.role) updates.role = updatedFields.role;
-      if (updatedFields.status) updates.status = updatedFields.status;
+      if (fieldsToApply.name) updates.name = fieldsToApply.name;
+      if (fieldsToApply.ign) updates.in_game_name = fieldsToApply.ign;
+      if (fieldsToApply.igid) updates.igid = fieldsToApply.igid;
+      if (fieldsToApply.role) updates.role = fieldsToApply.role;
+      if (fieldsToApply.status) updates.status = fieldsToApply.status;
       supabase.from('players').update(updates).eq('id', id).then(({ error }) => {
         if (error) console.error('Supabase update player error:', error);
       });
     }
 
-    return { success: true, message: 'Player details updated.' };
+    return { success: true, message: `${target.ign} details updated.` };
+  };
+
+  const swapStarter = (currentStarterId: string, standbyPlayerId: string): { success: boolean; message: string } => {
+    if (!canChangePlayerRole) {
+      return { success: false, message: 'Permission Denied: Only Master Admin, Admin, and IGL can swap squad starters.' };
+    }
+
+    const starter = players.find(p => p.id === currentStarterId);
+    const standby = players.find(p => p.id === standbyPlayerId);
+
+    if (!starter || !standby) {
+      return { success: false, message: 'Selected players not found.' };
+    }
+
+    setPlayers(prev => prev.map(p => {
+      if (p.id === currentStarterId) return { ...p, status: 'standby' };
+      if (p.id === standbyPlayerId) return { ...p, status: 'starter' };
+      return p;
+    }));
+
+    if (supabase) {
+      supabase.from('players').update({ status: 'standby' }).eq('id', currentStarterId).then(() => {});
+      supabase.from('players').update({ status: 'starter' }).eq('id', standbyPlayerId).then(() => {});
+    }
+
+    return { success: true, message: `Swapped! ${standby.ign} is now a Starter; ${starter.ign} moved to Standby.` };
   };
 
   const deletePlayer = (id: string) => {
-    if (!canManageRoster) {
-      return { success: false, message: 'Permission Denied: Only Master Admin, Coach, IGL, and Admin can remove players.' };
+    if (!canChangePlayerRole && !canManageRoster) {
+      return { success: false, message: 'Permission Denied: Only Master Admin, Admin, and IGL can remove players from squad.' };
     }
     setPlayers((prev) => prev.filter((p) => p.id !== id));
 
@@ -747,7 +851,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    return { success: true, message: 'Player removed from roster.' };
+    return { success: true, message: 'Player removed from squad roster.' };
   };
 
   // Points Systems
@@ -1030,6 +1134,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Tournament Delete
+  const deleteTournament = (id: string) => {
+    setTournaments((prev) => prev.filter((t) => t.id !== id));
+    if (supabase) {
+      supabase.from('tournaments').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase delete tournament error:', error);
+      });
+    }
+  };
+
+  // Task Edit & Delete
+  const editTask = (id: string, updated: Partial<Task>) => {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updated } : t)));
+    if (supabase) {
+      const updates: any = {};
+      if (updated.title) updates.title = updated.title;
+      if (updated.description !== undefined) updates.description = updated.description;
+      if (updated.priority) updates.priority = updated.priority;
+      if (updated.category) updates.category = updated.category;
+      if (updated.due_date) updates.due_date = updated.due_date;
+      supabase.from('tasks').update(updates).eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase update task error:', error);
+      });
+    }
+  };
+
+  const deleteTask = (id: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    if (supabase) {
+      supabase.from('tasks').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase delete task error:', error);
+      });
+    }
+  };
+
+  // Financial Edit & Delete
+  const updateInvestment = (id: string, updated: Partial<Investment>) => {
+    setInvestments((prev) => prev.map((i) => (i.id === id ? { ...i, ...updated } : i)));
+    if (supabase) {
+      const updates: any = {};
+      if (updated.note !== undefined) {
+        updates.notes = updated.note;
+        updates.title = updated.note;
+      }
+      if (updated.type) updates.category = updated.type;
+      if (updated.amount !== undefined) updates.amount = updated.amount;
+      if (updated.spent_date) updates.date = updated.spent_date;
+      supabase.from('investments').update(updates).eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase update investment error:', error);
+      });
+    }
+  };
+
+  const deleteInvestment = (id: string) => {
+    setInvestments((prev) => prev.filter((i) => i.id !== id));
+    if (supabase) {
+      supabase.from('investments').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase delete investment error:', error);
+      });
+    }
+  };
+
+  const updateReturn = (id: string, updated: Partial<FinancialReturn>) => {
+    setReturns((prev) => prev.map((r) => (r.id === id ? { ...r, ...updated } : r)));
+    if (supabase) {
+      const updates: any = {};
+      if (updated.note !== undefined) {
+        updates.notes = updated.note;
+        updates.title = updated.note;
+      }
+      if (updated.type) updates.source = updated.type;
+      if (updated.amount !== undefined) updates.amount = updated.amount;
+      if (updated.received_date) updates.date = updated.received_date;
+      supabase.from('returns').update(updates).eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase update return error:', error);
+      });
+    }
+  };
+
+  const deleteReturn = (id: string) => {
+    setReturns((prev) => prev.filter((r) => r.id !== id));
+    if (supabase) {
+      supabase.from('returns').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Supabase delete return error:', error);
+      });
+    }
+  };
+
   const resetToSeedData = () => {
     localStorage.removeItem(`${STORAGE_KEY}_players`);
     localStorage.removeItem(`${STORAGE_KEY}_tournaments`);
@@ -1072,9 +1264,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         rejectUser,
         players,
         canManageRoster,
+        canChangePlayerRole,
         addPlayer,
         updatePlayer,
         deletePlayer,
+        swapStarter,
         pointsSystems,
         activePointsSystem,
         updatePointsSystem,
@@ -1082,6 +1276,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         tournaments,
         addTournament,
         updateTournament,
+        deleteTournament,
         matches,
         playerStats,
         addMatchWithStats,
@@ -1090,12 +1285,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteScreenshot,
         tasks,
         createTask,
+        editTask,
+        deleteTask,
         updateTaskStatus,
         addTaskComment,
         investments,
         returns,
         addInvestment,
+        updateInvestment,
+        deleteInvestment,
         addReturn,
+        updateReturn,
+        deleteReturn,
         resetToSeedData
       }}
     >

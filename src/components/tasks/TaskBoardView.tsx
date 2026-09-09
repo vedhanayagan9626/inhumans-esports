@@ -11,13 +11,25 @@ import {
   RotateCcw,
   Sparkles,
   Send,
+  Edit2,
+  Trash2,
   X
 } from 'lucide-react';
 
 export const TaskBoardView: React.FC = () => {
-  const { currentUser, tasks, createTask, updateTaskStatus, addTaskComment, players } = useApp();
+  const {
+    currentUser,
+    tasks,
+    createTask,
+    editTask,
+    deleteTask,
+    updateTaskStatus,
+    addTaskComment,
+    players
+  } = useApp();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [activeTaskModal, setActiveTaskModal] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [commentInput, setCommentInput] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [permissionAlert, setPermissionAlert] = useState<string | null>(null);
@@ -47,6 +59,51 @@ export const TaskBoardView: React.FC = () => {
     return t.category === selectedCategory;
   });
 
+  const openCreateModal = () => {
+    setEditingTask(null);
+    setNewTaskData({
+      title: '',
+      description: '',
+      category: 'aim',
+      assigned_to_squad: true,
+      assigned_to_player_id: '',
+      priority: 'high',
+      due_date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+      is_recurring: false,
+      recurrence_rule: 'daily',
+      status: 'assigned'
+    });
+    setIsCreateModalOpen(true);
+  };
+
+  const openEditModal = (task: Task, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingTask(task);
+    setNewTaskData({
+      title: task.title,
+      description: task.description,
+      category: task.category,
+      assigned_to_squad: task.assigned_to_squad,
+      assigned_to_player_id: task.assigned_to_player_id || '',
+      priority: task.priority,
+      due_date: task.due_date,
+      is_recurring: task.is_recurring,
+      recurrence_rule: (task.recurrence_rule as any) || 'daily',
+      status: task.status
+    });
+    setIsCreateModalOpen(true);
+  };
+
+  const handleDeleteTask = (taskId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (confirm('Are you sure you want to delete this drill / task?')) {
+      deleteTask(taskId);
+      if (activeTaskModal?.id === taskId) {
+        setActiveTaskModal(null);
+      }
+    }
+  };
+
   const handleStatusChange = (taskId: string, targetStatus: TaskStatus) => {
     const res = updateTaskStatus(taskId, targetStatus);
     if (!res.success) {
@@ -70,20 +127,35 @@ export const TaskBoardView: React.FC = () => {
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    createTask({
-      title: newTaskData.title,
-      description: newTaskData.description,
-      category: newTaskData.category,
-      assigned_by: currentUser?.id || 'admin',
-      assigned_to_squad: newTaskData.assigned_to_squad,
-      assigned_to_player_id: newTaskData.assigned_to_squad ? undefined : newTaskData.assigned_to_player_id,
-      priority: newTaskData.priority,
-      due_date: newTaskData.due_date,
-      status: 'assigned',
-      is_recurring: newTaskData.is_recurring,
-      recurrence_rule: newTaskData.is_recurring ? newTaskData.recurrence_rule : undefined
-    });
+    if (editingTask) {
+      editTask(editingTask.id, {
+        title: newTaskData.title,
+        description: newTaskData.description,
+        category: newTaskData.category,
+        assigned_to_squad: newTaskData.assigned_to_squad,
+        assigned_to_player_id: newTaskData.assigned_to_squad ? undefined : newTaskData.assigned_to_player_id,
+        priority: newTaskData.priority,
+        due_date: newTaskData.due_date,
+        is_recurring: newTaskData.is_recurring,
+        recurrence_rule: newTaskData.is_recurring ? newTaskData.recurrence_rule : undefined
+      });
+    } else {
+      createTask({
+        title: newTaskData.title,
+        description: newTaskData.description,
+        category: newTaskData.category,
+        assigned_by: currentUser?.id || 'admin',
+        assigned_to_squad: newTaskData.assigned_to_squad,
+        assigned_to_player_id: newTaskData.assigned_to_squad ? undefined : newTaskData.assigned_to_player_id,
+        priority: newTaskData.priority,
+        due_date: newTaskData.due_date,
+        status: 'assigned',
+        is_recurring: newTaskData.is_recurring,
+        recurrence_rule: newTaskData.is_recurring ? newTaskData.recurrence_rule : undefined
+      });
+    }
     setIsCreateModalOpen(false);
+    setEditingTask(null);
   };
 
   const getPriorityBadge = (p: TaskPriority) => {
@@ -129,8 +201,7 @@ export const TaskBoardView: React.FC = () => {
             </div>
           </div>
         </div>
-
-        <button onClick={() => setIsCreateModalOpen(true)} className="btn btn-primary" id="btn-create-task">
+        <button onClick={openCreateModal} className="btn btn-primary" id="btn-create-task">
           <Plus size={15} />
           <span>+ Create Drill / Task</span>
         </button>
@@ -143,25 +214,21 @@ export const TaskBoardView: React.FC = () => {
           background: 'rgba(229, 37, 53, 0.15)',
           border: '1px solid rgba(229, 37, 53, 0.3)',
           color: '#ff4d5e',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          fontSize: '0.85rem'
+          fontSize: '0.82rem',
+          fontWeight: 600
         }}>
-          <AlertTriangle size={16} />
-          <span>{permissionAlert}</span>
+          {permissionAlert}
         </div>
       )}
 
       {/* Category Pills */}
-      <div className="hide-scrollbar" style={{ display: 'flex', gap: '6px', overflowX: 'auto', whiteSpace: 'nowrap', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: '10px' }}>
+      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: '10px' }}>
         {[
-          { id: 'all', label: 'All Tasks' },
-          { id: 'aim', label: '🎯 Aim / TDM' },
-          { id: 'rotation', label: '🗺️ Rotations' },
-          { id: 'vod_review', label: '📺 VOD Reviews' },
-          { id: 'comms', label: '🎙️ Comms Protocol' },
-          { id: 'drill', label: '🛡️ Utilities' }
+          { id: 'all', label: `All Tasks (${tasks.length})` },
+          { id: 'aim', label: '🎯 Aim & TDM' },
+          { id: 'vod', label: '📹 VOD Review' },
+          { id: 'scrims', label: '⚔️ Scrim Practice' },
+          { id: 'tactics', label: '🗺️ Map Tactics' }
         ].map((cat) => (
           <button
             key={cat.id}
@@ -175,7 +242,6 @@ export const TaskBoardView: React.FC = () => {
               cursor: 'pointer',
               fontSize: '0.8rem',
               fontWeight: selectedCategory === cat.id ? 700 : 500,
-              flexShrink: 0,
               whiteSpace: 'nowrap'
             }}
           >
@@ -187,7 +253,7 @@ export const TaskBoardView: React.FC = () => {
       {/* Kanban Columns */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
         gap: '14px',
         alignItems: 'start'
       }}>
@@ -247,10 +313,30 @@ export const TaskBoardView: React.FC = () => {
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span className="badge badge-red" style={{ fontSize: '0.65rem' }}>
-                            {task.category.toUpperCase()}
-                          </span>
-                          {getPriorityBadge(task.priority)}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <span className="badge badge-red" style={{ fontSize: '0.65rem' }}>
+                              {task.category.toUpperCase()}
+                            </span>
+                            {getPriorityBadge(task.priority)}
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={(e) => openEditModal(task, e)}
+                              className="btn btn-secondary"
+                              title="Edit Drill"
+                              style={{ padding: '2px 5px', fontSize: '0.65rem' }}
+                            >
+                              <Edit2 size={11} />
+                            </button>
+                            <button
+                              onClick={(e) => handleDeleteTask(task.id, e)}
+                              className="btn btn-danger"
+                              title="Delete Drill"
+                              style={{ padding: '2px 5px', fontSize: '0.65rem' }}
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
                         </div>
 
                         <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#ffffff' }}>
@@ -345,9 +431,30 @@ export const TaskBoardView: React.FC = () => {
                 </div>
                 <h2 style={{ fontSize: '1.2rem', color: '#ffffff' }}>{activeTaskModal.title}</h2>
               </div>
-              <button onClick={() => setActiveTaskModal(null)} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}>
-                <X size={20} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={(e) => {
+                    openEditModal(activeTaskModal, e);
+                    setActiveTaskModal(null);
+                  }}
+                  className="btn btn-secondary"
+                  style={{ padding: '5px 10px', fontSize: '0.75rem' }}
+                >
+                  <Edit2 size={12} />
+                  <span>Edit</span>
+                </button>
+                <button
+                  onClick={(e) => handleDeleteTask(activeTaskModal.id, e)}
+                  className="btn btn-danger"
+                  style={{ padding: '5px 10px', fontSize: '0.75rem' }}
+                >
+                  <Trash2 size={12} />
+                  <span>Delete</span>
+                </button>
+                <button onClick={() => setActiveTaskModal(null)} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}>
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             <div style={{ background: '#1c1d25', padding: '12px', borderRadius: '6px', marginBottom: '16px', color: '#a1a1aa', fontSize: '0.85rem' }}>
@@ -452,7 +559,9 @@ export const TaskBoardView: React.FC = () => {
         <div className="modal-backdrop" onClick={() => setIsCreateModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '1.2rem', color: '#ffffff' }}>ASSIGN TACTICAL DRILL / TASK</h2>
+              <h2 style={{ fontSize: '1.2rem', color: '#ffffff' }}>
+                {editingTask ? `EDIT DRILL: ${editingTask.title}` : 'ASSIGN TACTICAL DRILL / TASK'}
+              </h2>
               <button onClick={() => setIsCreateModalOpen(false)} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
@@ -524,7 +633,7 @@ export const TaskBoardView: React.FC = () => {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  Assign Drill
+                  {editingTask ? 'Update Drill' : 'Assign Drill'}
                 </button>
               </div>
             </form>

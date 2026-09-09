@@ -6,14 +6,27 @@ import {
   TrendingUp,
   TrendingDown,
   PlusCircle,
+  Edit2,
+  Trash2,
   X
 } from 'lucide-react';
 
 export const FinanceView: React.FC = () => {
-  const { investments, returns, addInvestment, addReturn, tournaments } = useApp();
+  const {
+    investments,
+    returns,
+    addInvestment,
+    updateInvestment,
+    deleteInvestment,
+    addReturn,
+    updateReturn,
+    deleteReturn,
+    tournaments
+  } = useApp();
   const [selectedTournamentFilter, setSelectedTournamentFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'investment' | 'return'>('investment');
+  const [editingEntry, setEditingEntry] = useState<{ type: 'investment' | 'return'; id: string } | null>(null);
 
   // Form State
   const [amount, setAmount] = useState<number>(15000);
@@ -38,33 +51,78 @@ export const FinanceView: React.FC = () => {
   const roi = totalInvested > 0 ? ((netPL / totalInvested) * 100).toFixed(1) : '0.0';
 
   const handleOpenModal = (type: 'investment' | 'return') => {
+    setEditingEntry(null);
     setModalType(type);
     setEntryType(type === 'investment' ? 'scrims' : 'prize');
     setAmount(type === 'investment' ? 25000 : 100000);
     setNote('');
+    setDate(new Date().toISOString().split('T')[0]);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditInvestment = (inv: Investment) => {
+    setEditingEntry({ type: 'investment', id: inv.id });
+    setModalType('investment');
+    setAmount(inv.amount);
+    setEntryType(inv.type);
+    setTournamentId(inv.tournament_id || '');
+    setNote(inv.note);
+    setDate(inv.spent_date);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditReturn = (ret: FinancialReturn) => {
+    setEditingEntry({ type: 'return', id: ret.id });
+    setModalType('return');
+    setAmount(ret.amount);
+    setEntryType(ret.type);
+    setTournamentId(ret.tournament_id || '');
+    setNote(ret.note);
+    setDate(ret.received_date);
     setIsModalOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (modalType === 'investment') {
-      addInvestment({
-        tournament_id: tournamentId || undefined,
-        type: entryType as InvestmentType,
-        amount: Number(amount),
-        note,
-        spent_date: date
-      });
+    if (editingEntry) {
+      if (editingEntry.type === 'investment') {
+        updateInvestment(editingEntry.id, {
+          tournament_id: tournamentId || undefined,
+          type: entryType as InvestmentType,
+          amount: Number(amount),
+          note,
+          spent_date: date
+        });
+      } else {
+        updateReturn(editingEntry.id, {
+          tournament_id: tournamentId || undefined,
+          type: entryType as ReturnType,
+          amount: Number(amount),
+          note,
+          received_date: date
+        });
+      }
     } else {
-      addReturn({
-        tournament_id: tournamentId || undefined,
-        type: entryType as ReturnType,
-        amount: Number(amount),
-        note,
-        received_date: date
-      });
+      if (modalType === 'investment') {
+        addInvestment({
+          tournament_id: tournamentId || undefined,
+          type: entryType as InvestmentType,
+          amount: Number(amount),
+          note,
+          spent_date: date
+        });
+      } else {
+        addReturn({
+          tournament_id: tournamentId || undefined,
+          type: entryType as ReturnType,
+          amount: Number(amount),
+          note,
+          received_date: date
+        });
+      }
     }
     setIsModalOpen(false);
+    setEditingEntry(null);
   };
 
   return (
@@ -212,8 +270,32 @@ export const FinanceView: React.FC = () => {
                         <span style={{ marginLeft: '6px' }}>• {inv.spent_date}</span>
                       </div>
                     </div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--accent-red)' }}>
-                      -₹{inv.amount.toLocaleString('en-IN')}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--accent-red)' }}>
+                        -₹{inv.amount.toLocaleString('en-IN')}
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          onClick={() => handleOpenEditInvestment(inv)}
+                          className="btn btn-secondary"
+                          title="Edit Expense"
+                          style={{ padding: '3px 6px', fontSize: '0.68rem' }}
+                        >
+                          <Edit2 size={11} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Delete expense "${inv.note}"?`)) {
+                              deleteInvestment(inv.id);
+                            }
+                          }}
+                          className="btn btn-danger"
+                          title="Delete Expense"
+                          style={{ padding: '3px 6px', fontSize: '0.68rem' }}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -259,8 +341,32 @@ export const FinanceView: React.FC = () => {
                         <span style={{ marginLeft: '6px' }}>• {ret.received_date}</span>
                       </div>
                     </div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--bar-green)' }}>
-                      +₹{ret.amount.toLocaleString('en-IN')}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--bar-green)' }}>
+                        +₹{ret.amount.toLocaleString('en-IN')}
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          onClick={() => handleOpenEditReturn(ret)}
+                          className="btn btn-secondary"
+                          title="Edit Return"
+                          style={{ padding: '3px 6px', fontSize: '0.68rem' }}
+                        >
+                          <Edit2 size={11} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Delete return "${ret.note}"?`)) {
+                              deleteReturn(ret.id);
+                            }
+                          }}
+                          className="btn btn-danger"
+                          title="Delete Return"
+                          style={{ padding: '3px 6px', fontSize: '0.68rem' }}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -276,7 +382,9 @@ export const FinanceView: React.FC = () => {
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h2 style={{ fontSize: '1.2rem', color: '#ffffff' }}>
-                {modalType === 'investment' ? 'LOG EXPENSE / SCRIMS / WILDCARDS' : 'RECORD RETURN / PRIZE MONEY'}
+                {editingEntry
+                  ? (modalType === 'investment' ? 'EDIT EXPENSE RECORD' : 'EDIT RETURN / PRIZE RECORD')
+                  : (modalType === 'investment' ? 'LOG EXPENSE / SCRIMS / WILDCARDS' : 'RECORD RETURN / PRIZE MONEY')}
               </h2>
               <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}>
                 <X size={20} />
@@ -380,7 +488,7 @@ export const FinanceView: React.FC = () => {
                   Cancel
                 </button>
                 <button type="submit" className={modalType === 'investment' ? 'btn btn-danger' : 'btn btn-primary'}>
-                  {modalType === 'investment' ? 'Save Expense' : 'Save Income'}
+                  {editingEntry ? 'Update Record' : (modalType === 'investment' ? 'Save Expense' : 'Save Income')}
                 </button>
               </div>
             </form>

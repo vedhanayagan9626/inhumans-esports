@@ -10,14 +10,27 @@ import {
   Calendar,
   Lock,
   Hash,
+  ArrowLeftRight,
+  ShieldAlert,
   X
 } from 'lucide-react';
 
 export const RosterView: React.FC = () => {
-  const { players, addPlayer, updatePlayer, deletePlayer, playerStats, canManageRoster, currentUser } = useApp();
+  const {
+    players,
+    addPlayer,
+    updatePlayer,
+    deletePlayer,
+    swapStarter,
+    canChangePlayerRole,
+    playerStats,
+    canManageRoster,
+    currentUser
+  } = useApp();
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [swapModalTarget, setSwapModalTarget] = useState<Player | null>(null);
   const [feedbackBanner, setFeedbackBanner] = useState<string | null>(null);
 
   // Form State
@@ -32,6 +45,30 @@ export const RosterView: React.FC = () => {
     notes: '',
     avatar: '⚡'
   });
+
+  const starters = players.filter((p) => p.status === 'starter');
+  const startersCount = starters.length;
+
+  const isOwnPlayerCard = (p: Player) => {
+    if (!currentUser) return false;
+    const curName = (currentUser.name || '').toLowerCase().trim();
+    const curEmail = (currentUser.email || '').toLowerCase().trim();
+    const pName = (p.name || '').toLowerCase().trim();
+    const pIgn = (p.ign || '').toLowerCase().trim();
+
+    return (
+      (pName && pName === curName) ||
+      (pIgn && pIgn === curName) ||
+      (curEmail && curEmail.startsWith(pName)) ||
+      p.id === currentUser.id ||
+      p.id === `p_${currentUser.id}` ||
+      (currentUser.player_id && p.id === currentUser.player_id)
+    );
+  };
+
+  const canEditCard = (p: Player) => {
+    return canManageRoster || isOwnPlayerCard(p);
+  };
 
   const filteredPlayers = players.filter((p) => {
     if (filterStatus === 'all') return true;
@@ -57,7 +94,7 @@ export const RosterView: React.FC = () => {
 
   const openAddModal = () => {
     if (!canManageRoster) {
-      setFeedbackBanner('Permission Denied: Only Coach, IGL, and Admin are authorized to add players.');
+      setFeedbackBanner('Permission Denied: Only Master Admin, Coach, IGL, and Admin are authorized to add players.');
       setTimeout(() => setFeedbackBanner(null), 3500);
       return;
     }
@@ -66,7 +103,7 @@ export const RosterView: React.FC = () => {
       ign: '',
       igid: '',
       role: 'assault',
-      status: 'starter',
+      status: startersCount < 4 ? 'starter' : 'standby',
       join_date: new Date().toISOString().split('T')[0],
       device: 'iPhone 15 Pro',
       notes: '',
@@ -77,8 +114,8 @@ export const RosterView: React.FC = () => {
   };
 
   const openEditModal = (player: Player) => {
-    if (!canManageRoster) {
-      setFeedbackBanner('Permission Denied: Only Coach, IGL, and Admin can edit player information.');
+    if (!canEditCard(player)) {
+      setFeedbackBanner('Permission Denied: You can only edit your own player profile.');
       setTimeout(() => setFeedbackBanner(null), 3500);
       return;
     }
@@ -104,27 +141,59 @@ export const RosterView: React.FC = () => {
       if (res.success) {
         setFeedbackBanner(res.message);
         setTimeout(() => setFeedbackBanner(null), 3000);
+      } else {
+        setFeedbackBanner(res.message);
+        setTimeout(() => setFeedbackBanner(null), 4000);
       }
     } else {
       const res = addPlayer(formData);
       if (res.success) {
         setFeedbackBanner(res.message);
         setTimeout(() => setFeedbackBanner(null), 3000);
+      } else {
+        setFeedbackBanner(res.message);
+        setTimeout(() => setFeedbackBanner(null), 4000);
       }
     }
     setIsAddModalOpen(false);
   };
 
+  const handlePromoteToStarter = (player: Player) => {
+    if (!canChangePlayerRole) return;
+    if (startersCount >= 4) {
+      setSwapModalTarget(player);
+      return;
+    }
+    const res = updatePlayer(player.id, { status: 'starter' });
+    setFeedbackBanner(res.message);
+    setTimeout(() => setFeedbackBanner(null), 3000);
+  };
+
+  const handleDemoteToStandby = (player: Player) => {
+    if (!canChangePlayerRole) return;
+    const res = updatePlayer(player.id, { status: 'standby' });
+    setFeedbackBanner(res.message);
+    setTimeout(() => setFeedbackBanner(null), 3000);
+  };
+
+  const handleExecuteSwap = (starterPlayerId: string) => {
+    if (!swapModalTarget) return;
+    const res = swapStarter(starterPlayerId, swapModalTarget.id);
+    setFeedbackBanner(res.message);
+    setTimeout(() => setFeedbackBanner(null), 3500);
+    setSwapModalTarget(null);
+  };
+
   const getRoleBadge = (role: PlayerRole) => {
     switch (role) {
       case 'igl':
-        return <span className="badge badge-red">IGL / SHOT CALLER</span>;
+        return <span className="badge badge-red">🎯 IGL / SHOT CALLER</span>;
       case 'assault':
-        return <span className="badge badge-purple">ASSAULTER</span>;
+        return <span className="badge badge-purple">⚡ ASSAULTER</span>;
       case 'sniper':
-        return <span className="badge badge-cyan">SNIPER / DMR</span>;
+        return <span className="badge badge-cyan">🔭 SNIPER / DMR</span>;
       case 'support':
-        return <span className="badge badge-green">SUPPORT / MEDIC</span>;
+        return <span className="badge badge-green">🛡️ SUPPORT / MEDIC</span>;
     }
   };
 
@@ -379,35 +448,148 @@ export const RosterView: React.FC = () => {
                 </div>
               </div>
 
-              {canManageRoster && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '10px' }}>
-                  <button
-                    onClick={() => openEditModal(player)}
-                    className="btn btn-secondary"
-                    style={{ padding: '5px 10px', fontSize: '0.75rem' }}
-                  >
-                    <Edit2 size={12} />
-                    <span>Edit Info</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (confirm(`Remove ${player.ign} from the squad?`)) {
-                        deletePlayer(player.id);
-                      }
-                    }}
-                    className="btn btn-danger"
-                    style={{ padding: '5px 10px', fontSize: '0.75rem' }}
-                  >
-                    <Trash2 size={12} />
-                    <span>Remove</span>
-                  </button>
+              {/* Action Buttons */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+                borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                paddingTop: '10px'
+              }}>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {canChangePlayerRole && (
+                    <>
+                      {player.status === 'starter' ? (
+                        <button
+                          onClick={() => handleDemoteToStandby(player)}
+                          className="btn btn-secondary"
+                          title="Move starter to Standby"
+                          style={{ padding: '5px 9px', fontSize: '0.72rem', color: 'var(--bar-amber)', borderColor: 'rgba(245, 158, 11, 0.3)' }}
+                        >
+                          <span>⬇ Standby</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handlePromoteToStarter(player)}
+                          className="btn btn-secondary"
+                          title={startersCount >= 4 ? 'Swap with an active starter' : 'Promote to Starter'}
+                          style={{ padding: '5px 9px', fontSize: '0.72rem', color: 'var(--bar-green)', borderColor: 'rgba(34, 197, 94, 0.3)' }}
+                        >
+                          <ArrowLeftRight size={12} />
+                          <span>{startersCount >= 4 ? 'Swap to Starter' : '⭐ Starter'}</span>
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
-              )}
+
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  {canEditCard(player) && (
+                    <button
+                      onClick={() => openEditModal(player)}
+                      className="btn btn-secondary"
+                      style={{ padding: '5px 10px', fontSize: '0.75rem' }}
+                    >
+                      <Edit2 size={12} />
+                      <span>{isOwnPlayerCard(player) && !canChangePlayerRole ? 'Edit My Info' : 'Edit'}</span>
+                    </button>
+                  )}
+
+                  {canManageRoster && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`Remove ${player.ign} from the squad?`)) {
+                          deletePlayer(player.id);
+                        }
+                      }}
+                      className="btn btn-danger"
+                      style={{ padding: '5px 10px', fontSize: '0.75rem' }}
+                    >
+                      <Trash2 size={12} />
+                      <span>Remove</span>
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           );
         })
       )}
       </div>
+
+      {/* Quick Swap Starter Modal */}
+      {swapModalTarget && (
+        <div className="modal-backdrop" onClick={() => setSwapModalTarget(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: '24px', maxWidth: '480px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.15rem', color: '#ffffff', fontWeight: 800 }}>
+                  SWAP STARTER ROSTER
+                </h2>
+                <div style={{ fontSize: '0.75rem', color: '#a1a1aa', marginTop: '2px' }}>
+                  Promoting <strong style={{ color: 'var(--bar-green)' }}>{swapModalTarget.ign}</strong> to Playing 4. Select a starter to bench to Standby:
+                </div>
+              </div>
+              <button
+                onClick={() => setSwapModalTarget(null)}
+                style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', margin: '14px 0' }}>
+              {starters.map((starter) => (
+                <div
+                  key={starter.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px 14px',
+                    background: '#1c1d25',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.08)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>{starter.avatar || '⚡'}</span>
+                    <div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#ffffff' }}>
+                        {starter.ign}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#71717a' }}>
+                        {starter.name} • {starter.role.toUpperCase()}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleExecuteSwap(starter.id)}
+                    className="btn btn-primary"
+                    style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+                  >
+                    <ArrowLeftRight size={13} />
+                    <span>Swap Out</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setSwapModalTarget(null)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Modal */}
       {isAddModalOpen && (
@@ -473,11 +655,13 @@ export const RosterView: React.FC = () => {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', color: '#a1a1aa', marginBottom: '4px', fontWeight: 600 }}>
-                    TACTICAL ROLE *
+                    TACTICAL ROLE * {!canChangePlayerRole && <span style={{ color: 'var(--accent-red)', fontSize: '0.68rem' }}>(🔒 Locked to IGL / Admin)</span>}
                   </label>
                   <select
                     className="input-control"
                     value={formData.role}
+                    disabled={!canChangePlayerRole}
+                    style={!canChangePlayerRole ? { opacity: 0.6, cursor: 'not-allowed', background: '#181920' } : {}}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value as PlayerRole })}
                   >
                     <option value="igl">🎯 IGL / Shot Caller</option>
@@ -491,14 +675,24 @@ export const RosterView: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', color: '#a1a1aa', marginBottom: '4px', fontWeight: 600 }}>
-                    STATUS *
+                    STATUS * {!canChangePlayerRole && <span style={{ color: 'var(--accent-red)', fontSize: '0.68rem' }}>(🔒 Locked to IGL / Admin)</span>}
+                    {canChangePlayerRole && startersCount >= 4 && (!editingPlayer || editingPlayer.status !== 'starter') && (
+                      <span style={{ color: 'var(--bar-amber)', fontSize: '0.68rem', display: 'block' }}>Max 4 starters reached</span>
+                    )}
                   </label>
                   <select
                     className="input-control"
                     value={formData.status}
+                    disabled={!canChangePlayerRole}
+                    style={!canChangePlayerRole ? { opacity: 0.6, cursor: 'not-allowed', background: '#181920' } : {}}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as PlayerStatus })}
                   >
-                    <option value="starter">STARTER (Playing 4)</option>
+                    <option
+                      value="starter"
+                      disabled={startersCount >= 4 && (!editingPlayer || editingPlayer.status !== 'starter')}
+                    >
+                      STARTER (Playing 4) {startersCount >= 4 && (!editingPlayer || editingPlayer.status !== 'starter') ? '— [FULL 4/4]' : ''}
+                    </option>
                     <option value="standby">STANDBY / SUBSTITUTE</option>
                     <option value="inactive">INACTIVE</option>
                   </select>

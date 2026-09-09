@@ -45,21 +45,6 @@ export const LoginPage: React.FC = () => {
     }, 200);
   };
 
-  const handleQuickMasterAdmin = () => {
-    setEmail('vedhanayagant2000@gmail.com');
-    setPassword('@Vedha9626');
-    setFeedback(null);
-    setLoading(true);
-
-    setTimeout(() => {
-      const res = login('vedhanayagant2000@gmail.com', '@Vedha9626', true);
-      setLoading(false);
-      if (!res.success) {
-        setFeedback({ type: 'error', message: res.message });
-      }
-    }, 200);
-  };
-
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFeedback(null);
@@ -262,8 +247,9 @@ export const LoginPage: React.FC = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@inhumans.gg"
+                  placeholder="name@inhumans.gg"
                   required
+                  autoComplete="username"
                   className="input-control"
                   style={{ paddingLeft: '36px', fontSize: '0.85rem' }}
                 />
@@ -284,6 +270,7 @@ export const LoginPage: React.FC = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
+                  autoComplete="current-password"
                   className="input-control"
                   style={{ paddingLeft: '36px', fontSize: '0.85rem' }}
                 />
@@ -306,7 +293,7 @@ export const LoginPage: React.FC = () => {
                   onChange={(e) => setRemember(e.target.checked)}
                   style={{ accentColor: 'var(--accent-red)' }}
                 />
-                <span>Keep session active for 1 hour</span>
+                <span>Remember on this device (1 hour active session)</span>
               </label>
             </div>
 
@@ -321,61 +308,12 @@ export const LoginPage: React.FC = () => {
                 fontSize: '0.88rem',
                 fontWeight: 800,
                 borderRadius: '8px',
-                marginTop: '4px'
+                marginTop: '6px'
               }}
               id="btn-login-submit"
             >
               {loading ? 'Authenticating...' : 'Sign In to INHUMANS'}
             </button>
-
-            {/* Quick 1-Click Master Admin Access Pill */}
-            <div style={{
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px dashed rgba(255, 255, 255, 0.12)',
-              borderRadius: '8px',
-              padding: '12px',
-              marginTop: '8px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.72rem', color: '#a1a1aa', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Sparkles size={13} color="var(--accent-red)" />
-                  DEFAULT MASTER ADMIN:
-                </span>
-                <span className="badge badge-amber" style={{ fontSize: '0.65rem' }}>SHAAM</span>
-              </div>
-
-              <div style={{ fontSize: '0.72rem', color: '#71717a', lineHeight: 1.3 }}>
-                <code>vedhanayagant2000@gmail.com</code> • <code>@Vedha9626</code>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleQuickMasterAdmin}
-                style={{
-                  background: '#1c1d25',
-                  border: '1px solid rgba(229, 37, 53, 0.4)',
-                  color: '#ffffff',
-                  padding: '7px 10px',
-                  borderRadius: '6px',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent-red)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = '#1c1d25'; }}
-              >
-                <span>Direct Login as Master Admin (Shaam)</span>
-                <ArrowRight size={13} />
-              </button>
-            </div>
           </form>
         )}
 

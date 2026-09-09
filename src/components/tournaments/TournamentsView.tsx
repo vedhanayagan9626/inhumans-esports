@@ -25,6 +25,8 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEnt
   const {
     tournaments,
     addTournament,
+    updateTournament,
+    deleteTournament,
     matches,
     playerStats,
     pointsSystems,
@@ -37,6 +39,7 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEnt
     tournaments.find((t) => t.status === 'ongoing')?.id || tournaments[0]?.id || ''
   );
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
   const [activeScreenshotModal, setActiveScreenshotModal] = useState<{
     screenshot: MatchScreenshot;
     matchId: string;
@@ -87,23 +90,89 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEnt
     return { totalPoints, totalKills, chickenDinners, matchCount: tMatches.length };
   };
 
+  const openAddModal = () => {
+    setEditingTournament(null);
+    setFormData({
+      name: '',
+      organizer: '',
+      start_date: new Date().toISOString().split('T')[0],
+      end_date: new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0],
+      format: 'TPP',
+      entry_fee: 0,
+      prize_pool: 1000000,
+      points_system_id: pointsSystems[0]?.id || '',
+      status: 'available',
+      apply_link: '',
+      contact_info: '',
+      slots_info: ''
+    });
+    setIsAddModalOpen(true);
+  };
+
+  const openEditModal = (t: Tournament) => {
+    setEditingTournament(t);
+    setFormData({
+      name: t.name,
+      organizer: t.organizer || '',
+      start_date: t.start_date || new Date().toISOString().split('T')[0],
+      end_date: t.end_date || new Date().toISOString().split('T')[0],
+      format: t.format || 'TPP',
+      entry_fee: t.entry_fee || 0,
+      prize_pool: t.prize_pool || 0,
+      points_system_id: t.points_system_id || pointsSystems[0]?.id || '',
+      status: t.status,
+      apply_link: t.apply_link || '',
+      contact_info: t.contact_info || '',
+      slots_info: t.slots_info || ''
+    });
+    setIsAddModalOpen(true);
+  };
+
+  const handleDeleteTournament = (t: Tournament, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (confirm(`Are you sure you want to delete tournament "${t.name}" and all its match data?`)) {
+      deleteTournament(t.id);
+      if (selectedTournamentId === t.id) {
+        setSelectedTournamentId(tournaments.find((item) => item.id !== t.id)?.id || '');
+      }
+    }
+  };
+
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    addTournament({
-      name: formData.name,
-      organizer: formData.organizer,
-      start_date: formData.start_date,
-      end_date: formData.end_date,
-      format: formData.format,
-      entry_fee: Number(formData.entry_fee),
-      prize_pool: Number(formData.prize_pool),
-      points_system_id: formData.points_system_id || pointsSystems[0]?.id || '',
-      status: formData.status,
-      apply_link: formData.apply_link || undefined,
-      contact_info: formData.contact_info || undefined,
-      slots_info: formData.slots_info || undefined
-    });
+    if (editingTournament) {
+      updateTournament(editingTournament.id, {
+        name: formData.name,
+        organizer: formData.organizer,
+        start_date: formData.start_date,
+        end_date: formData.end_date,
+        format: formData.format,
+        entry_fee: Number(formData.entry_fee),
+        prize_pool: Number(formData.prize_pool),
+        points_system_id: formData.points_system_id || pointsSystems[0]?.id || '',
+        status: formData.status,
+        apply_link: formData.apply_link || undefined,
+        contact_info: formData.contact_info || undefined,
+        slots_info: formData.slots_info || undefined
+      });
+    } else {
+      addTournament({
+        name: formData.name,
+        organizer: formData.organizer,
+        start_date: formData.start_date,
+        end_date: formData.end_date,
+        format: formData.format,
+        entry_fee: Number(formData.entry_fee),
+        prize_pool: Number(formData.prize_pool),
+        points_system_id: formData.points_system_id || pointsSystems[0]?.id || '',
+        status: formData.status,
+        apply_link: formData.apply_link || undefined,
+        contact_info: formData.contact_info || undefined,
+        slots_info: formData.slots_info || undefined
+      });
+    }
     setIsAddModalOpen(false);
+    setEditingTournament(null);
   };
 
   const getStatusBadge = (status: TournamentStatus) => {
@@ -153,7 +222,7 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEnt
         </div>
 
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <button onClick={() => setIsAddModalOpen(true)} className="btn btn-secondary">
+          <button onClick={openAddModal} className="btn btn-secondary">
             <Plus size={15} />
             <span>+ Add Tournament</span>
           </button>
@@ -214,7 +283,7 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEnt
             <p style={{ color: '#71717a', fontSize: '0.82rem', marginTop: '6px', maxWidth: '440px', margin: '6px auto 16px auto' }}>
               Schedule registered tournament brackets, BGIS/BMPS open qualifiers, or practice scrim series.
             </p>
-            <button onClick={() => setIsAddModalOpen(true)} className="btn btn-primary" style={{ padding: '8px 18px' }}>
+            <button onClick={openAddModal} className="btn btn-primary" style={{ padding: '8px 18px' }}>
               + Add First Tournament
             </button>
           </div>
@@ -314,6 +383,39 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEnt
                 <span>WWCD: <strong style={{ color: '#ff4d5e' }}>{metrics.chickenDinners} 🍗</strong></span>
                 <span>Points: <strong style={{ color: 'var(--bar-blue)' }}>{metrics.totalPoints}</strong></span>
               </div>
+
+              {/* Card Footer Actions: Edit & Delete */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                paddingTop: '8px'
+              }}>
+                <div style={{ fontSize: '0.7rem', color: '#71717a' }}>
+                  {t.start_date}
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openEditModal(t); }}
+                    className="btn btn-secondary"
+                    title="Edit Tournament"
+                    style={{ padding: '4px 8px', fontSize: '0.72rem' }}
+                  >
+                    <Edit2 size={12} />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteTournament(t, e)}
+                    className="btn btn-danger"
+                    title="Delete Tournament"
+                    style={{ padding: '4px 8px', fontSize: '0.72rem' }}
+                  >
+                    <Trash2 size={12} />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              </div>
             </div>
           );
         })
@@ -345,10 +447,28 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEnt
               </div>
             </div>
 
-            <button onClick={onOpenMatchEntry} className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.8rem' }}>
-              <Plus size={14} />
-              <span>Record Match</span>
-            </button>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => openEditModal(selectedTournament)}
+                className="btn btn-secondary"
+                style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+              >
+                <Edit2 size={13} />
+                <span>Edit</span>
+              </button>
+              <button
+                onClick={(e) => handleDeleteTournament(selectedTournament, e)}
+                className="btn btn-danger"
+                style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+              >
+                <Trash2 size={13} />
+                <span>Delete</span>
+              </button>
+              <button onClick={onOpenMatchEntry} className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.8rem' }}>
+                <Plus size={14} />
+                <span>Record Match</span>
+              </button>
+            </div>
           </div>
 
           {tournamentMatches.length === 0 ? (
@@ -484,7 +604,9 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEnt
         <div className="modal-backdrop" onClick={() => setIsAddModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '1.2rem', color: '#ffffff' }}>REGISTER NEW TOURNAMENT</h2>
+              <h2 style={{ fontSize: '1.2rem', color: '#ffffff' }}>
+                {editingTournament ? `EDIT TOURNAMENT: ${editingTournament.name}` : 'REGISTER NEW TOURNAMENT'}
+              </h2>
               <button onClick={() => setIsAddModalOpen(false)} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
@@ -594,7 +716,7 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({ onOpenMatchEnt
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  Save Tournament
+                  {editingTournament ? 'Update Tournament' : 'Save Tournament'}
                 </button>
               </div>
             </form>
