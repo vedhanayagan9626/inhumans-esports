@@ -439,7 +439,7 @@ export const FinanceView: React.FC = () => {
                 <input
                   type="number"
                   min="1"
-                  step="500"
+                  step="1"
                   required
                   className="input-control"
                   value={amount}
